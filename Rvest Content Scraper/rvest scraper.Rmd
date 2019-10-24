@@ -1,0 +1,127 @@
+## Main Collection
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+df = read.csv("path/urls_complete.csv")
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(rvest)
+library(progress)
+library(curl)
+library(purrr)
+
+df$url = as.character(df$url)
+df$text = as.character(df$text)
+df$date = as.character(df$date)
+
+collect = function(url) {
+ webpage = read_html(curl(url, handle = curl::new_handle("useragent" = "Mozilla/5.0")))
+ text = paste0(html_text(html_nodes(webpage,'#story > section')), 
+               html_text(html_nodes(webpage,'#story > div:nth-child(2) > div.story-body.story-body-1')),
+               html_text(html_nodes(webpage,'#story > div:nth-child(3) > div.story-body.story-body-1')),
+               html_text(html_nodes(webpage,'#story > div:nth-child(4) > div.story-body.story-body-1')))
+ return(text)}
+
+collect = possibly(collect, otherwise = NA) # returns NA to collect function if encountering an error
+```
+
+```{r}
+range = c(1, 100)
+datalist = list()
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+# options(timeout = 1000000)
+
+for (i in range) {
+ url = df$url[i] # collects url from df
+ date = df$date[i] # collects date from df
+ summ = df$text[i] # collects summary from df
+ id = df$id[i] # collects id from df
+ row = data.frame(id = id, date = date, summ = summ, url = url) 
+ row$text = ""
+ text2 = collect(url) # opens and scrapes webpage & saves text in column
+ row$text = paste(row$text, text2) # if there is text in text2, add to text 
+ j = i - min(range) + 1 # makes sure that list starts at [[1]]
+ datalist[[j]] = row # adds row to list
+ message(print(paste("iteration number:", j, "out of", max(range) - min(range), "TEXT:", substr(row$text, start=1, stop=40))))
+ flush.console()
+ }
+```
+
+```{r}
+library(plyr)
+content = do.call(rbind.fill, datalist)
+```
+
+```{r}
+write.csv(content, "path/contentfile_end.csv")
+```
+
+## Missing Collection
+
+```{r}
+df = read.csv("path/urls_complete.csv")
+miss_urls = read.csv("path/listofmissings.csv")
+missings = miss_urls$id_miss
+df_subset = df[missings, ]
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(rvest)
+library(progress)
+library(curl)
+library(purrr)
+
+df_subset$url = as.character(df_subset$url)
+df_subset$text = as.character(df_subset$text)
+df_subset$date = as.character(df_subset$date)
+
+collect = function(url) {
+ webpage = read_html(curl(url, handle = curl::new_handle("useragent" = "Mozilla/5.0")))
+ text = paste0(html_text(html_nodes(webpage,'#story > section')), 
+               html_text(html_nodes(webpage,'#story > div:nth-child(2) > div.story-body.story-body-1')),
+               html_text(html_nodes(webpage,'#story > div:nth-child(3) > div.story-body.story-body-1')),
+               html_text(html_nodes(webpage,'#story > div:nth-child(4) > div.story-body.story-body-1')), 
+               html_text(html_nodes(webpage,'#story > header')), 
+               html_text(html_nodes(webpage,'#content')))
+ return(text)}
+
+collect = possibly(collect, otherwise = "Dead Link") # returns NA to collect function if encountering an error
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+datalist = list()
+
+for (i in 1:12746) {
+ url = df_subset$url[i] # collects url from df
+ date = df_subset$date[i] # collects date from df
+ summ = df_subset$text[i] # collects summary from df
+ id = df_subset$id[i] # collects id from df
+ row = data.frame(id = id, date = date, summ = summ, url = url) 
+ text2 = ""
+ text2 = paste0(text2, collect(url)) # opens and scrapes webpage & saves text in column
+ row$text = text2
+ j = i - min(range) + 1 # makes sure that list starts at [[1]]
+ datalist[[j]] = row # adds row to list
+ percentage = round(((i/12746)*100),2)
+ message(print(paste("iteration number:", j, "out of 12746 (", percentage, "%) TEXT:", substr(text2, start=1, stop=40))))
+ flush.console()
+ }
+```
+
+```{r}
+library(plyr)
+content = do.call(rbind.fill, datalist)
+```
+
+```{r}
+test = subset(content, text == " ")
+test
+```
+
+
+```{r}
+write.csv(content, "path/contentfile_end.csv")
+```
+
